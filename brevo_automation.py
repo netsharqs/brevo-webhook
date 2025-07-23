@@ -34,28 +34,11 @@ logging.basicConfig(
     ]
 )
 
-def send_email_notification(subject, body):
-    """Sendet eine Email-Benachrichtigung"""
-    try:
-        msg = EmailMessage()
-        msg.set_content(body)
-        msg['Subject'] = subject
-        msg['From'] = SMTP_CONFIG['sender']
-        msg['To'] = SMTP_CONFIG['recipient']
-
-        with smtplib.SMTP(SMTP_CONFIG['server'], SMTP_CONFIG['port']) as server:
-            server.starttls()
-            server.login(SMTP_CONFIG['username'], SMTP_CONFIG['password'])
-            server.send_message(msg)
-        logging.info("Email-Benachrichtigung erfolgreich versendet")
-    except Exception as e:
-        logging.error(f"Fehler beim Senden der Email: {str(e)}")
-
 def get_contacts():
     """Holt alle Kontakte von Brevo"""
     try:
         logging.info("Starte Abruf aller Kontakte")
-        response = requests.get(f"{API_URL}/contacts?limit=500", headers=HEADERS)
+        response = requests.get(f"{API_URL}/contacts", headers=HEADERS)
         response.raise_for_status()
         return response.json().get("contacts", [])
     except requests.exceptions.RequestException as e:
