@@ -14,6 +14,8 @@ templates = Jinja2Templates(directory="templates")
 
 BREVO_API_KEY = os.getenv("BREVO_API_KEY")
 TEAMS_WEBHOOK_URL = os.getenv("TEAMS_WEBHOOK_URL")
+DOI_TEMPLATE_ID = int(os.getenv("DOI_TEMPLATE_ID"))
+DOI_REDIRECT_URL = os.getenv("DOI_REDIRECT_URL")
 
 DB = "contacts.db"
 conn = sqlite3.connect(DB)
@@ -38,6 +40,12 @@ def normalize_name(name):
     import re
     return re.sub(r'\W+', '', name or '').lower().strip()
 
+def contact_exists(email):
+    url = f"https://api.brevo.com/v3/contacts/{email}"
+    headers = {"api-key": BREVO_API_KEY}
+    resp = requests.get(url, headers=headers)
+    return resp.status_code == 200
+
 @retry(stop=stop_after_attempt(3), wait=wait_exponential())
 def create_brevo_contact(email, company, list_id):
     url = "https://api.brevo.com/v3/contacts"
@@ -50,14 +58,16 @@ def create_brevo_contact(email, company, list_id):
         "email": email,
         "attributes": {"COMPANY": company or ""},
         "listIds": [list_id],
-        "updateEnabled": True
+        "updateEnabled": True,
+        "templateId": DOI_TEMPLATE_ID,
+        "redirectionUrl": DOI_REDIRECT_URL
     }
     response = requests.post(url, json=data, headers=headers)
     response.raise_for_status()
     return response.json()
 
 def send_teams_notification(email, company, list_name):
-    text = f"🔜 Neuer Kontakt: {email} (Firma: {company}) → Liste: {list_name}"
+    text = f"\U0001f449 Neuer Kontakt: {email} (Firma: {company}) \u2192 Liste: {list_name}"
     requests.post(TEAMS_WEBHOOK_URL, json={"text": text})
 
 def save_to_db(email, company, list_name):
@@ -76,6 +86,9 @@ async def webhook(request: Request):
 
     if not email or form_id not in FORM_LIST_MAP:
         return {"status": "ignored", "reason": "missing data"}
+
+    if contact_exists(email):
+        return {"status": "ignored", "reason": "duplicate contact"}
 
     list_id = FORM_LIST_MAP[form_id]
     list_name = form_id
